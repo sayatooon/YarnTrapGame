@@ -9,15 +9,6 @@
 #define VIBRATION 2
 #define BUTTON 3
 #define FINISH 4
-// mode
-#define SPADE 0
-#define HEART 1
-#define DIAMOND 2
-#define CLUB 3
-#define START 4
-#define MOON 5
-#define CROWN 6
-#define FREE 7
 // button color
 #define WHITE 0
 #define BLUE 1
@@ -38,6 +29,7 @@
 const int PIN_BTN[] = {25, 26, 27, 14, 32}; // button digital I/O
 const int PIN_VIB = 33; // vibration sensor digital I/O
 const int PIN_PTM = 4; // potentiometer analog I/O
+const int PIN_DFP = 23; // DFplayer busy 
 //const int PIN_TX1 = 18, PIN_RX1 = 19; // DF player UART
 
 // device setting
@@ -98,19 +90,25 @@ void setup() {
   lcd.init();
   lcd.backlight();
 
-  lcd.setCursor(0, 0);
-  lcd.print("LCD connect.    ");
+  //lcd.setCursor(0, 0);
+  //lcd.print("LCD connect.    ");
 
   //speaker setting
-  myDFPlayer.begin(HardwareSerial);
   if (!myDFPlayer.begin(HardwareSerial)) {  //Use softwareSerial to communicate with mp3.
-    lcd.setCursor(0, 1);
+    lcd.setCursor(0, 0);
     lcd.print("Speaker fail.   ");
-  }else{
     lcd.setCursor(0, 1);
-    lcd.print("Speaker connect.");
+    lcd.print("Try restrat.");
+    while(1);
+  }else{
     myDFPlayer.volume(30); //Set volume value. From 0 to 30  
   }
+  lcd.setCursor(0, 0);
+  lcd.print("    WELCOME!");
+  lcd.setCursor(0, 1);
+  lcd.print("YARN TRAP GAME");
+  delay(1000);
+
 }
 
 void loop() {
@@ -359,8 +357,9 @@ void game_over(){
   lcd.noBlink();
   //delay(1000);
   myDFPlayer.play(GAMEOVER1_SOUND);
-  delay(3000);
+  while(digitalRead(PIN_DFP)==LOW);
   myDFPlayer.play(GAMEOVER2_SOUND);
+  while(digitalRead(PIN_DFP)==LOW);
 }
 
 // game clear
@@ -370,6 +369,8 @@ void game_clear(){
   lcd.print("CONGRATULATION!");
   lcd.noBlink();
   myDFPlayer.play(GAMECLEAR1_SOUND);
+  //while(digitalRead(PIN_DFP)==LOW);
   delay(2000);
   myDFPlayer.play(GAMECLEAR2_SOUND);
+  while(digitalRead(PIN_DFP)==LOW);
 }
