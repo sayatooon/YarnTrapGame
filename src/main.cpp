@@ -33,6 +33,7 @@ const int PIN_DFP = 23; // DFplayer busy
 //const int PIN_TX1 = 18, PIN_RX1 = 19; // DF player UART
 
 // device setting
+
 HardwareSerial HardwareSerial(2); // UART2 RX=GPIO16, TX=GPIO17 for the DFplayer
 //SoftwareSerial mySoftwareSerial(PIN_RX1, PIN_TX1); // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
@@ -53,8 +54,9 @@ int prevMode = 10, currMode =0; // game mode
 String mode[] ={"MODE1 ", "MODE2 ", "MODE3 ", "MODE4 ", "MODE5 ", "MODE6 ", "RANDOM", "SECRET"}; // 6 charactars
 // vairables for buttons and sensor
 bool push[] = {false, false, false, false, false}, sens = false; // flag of button/sensor interrupt 
-bool buttonState[] = {false, false, false, false, false}, buttonON[] = {false, false, false, false, false}; // button/sensor state
-//unsigned long prevTime_B[] = {0, 0, 0, 0, 0},  prevTime_S = 0;
+bool buttonState[] = {HIGH, HIGH, HIGH, HIGH, HIGH}, lastButtonState[] = {HIGH, HIGH, HIGH, HIGH, HIGH};
+unsigned long lastDebounceTime[5];
+unsigned long debounceWindow = 10; // [ms] ajust depending on the buttons
 int novib=0;
 
 // function prototype
@@ -66,6 +68,7 @@ void push_btn_G();
 void sens_vib();
 void game_over();
 void game_clear();
+int isPushbuttonClicked(int i);
 
 
 void setup() {
@@ -85,6 +88,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_BTN[GREEN]),push_btn_G,FALLING);
   pinMode( PIN_VIB, INPUT_PULLUP );
   attachInterrupt(digitalPinToInterrupt(PIN_VIB),sens_vib,FALLING);
+  pinMode( PIN_DFP, INPUT );
 
   // LCD setting
   lcd.init();
@@ -122,7 +126,6 @@ void loop() {
       prevMode = currMode;
       lcd.clear();
     
-      //if (currMode == FREE){
       if (currMode == 6 || currMode == 7){
         order_value = random(0,5);
         order[currMode][0] = order[order_value][0];
@@ -148,19 +151,19 @@ void loop() {
       }
     }
     
-    //check_button(WHITE);
-    //if (buttonON[WHITE]==true){
-    if (push[WHITE]){
-      myDFPlayer.play(START_SOUND);
-      numVib = 0; 
-      numBtnF = 0;
-      numBtnT = 0;
-      lcd.setCursor(btnCursol[numBtnT], 1);
-      lcd.blink();
-      state = SENSING;
-      //Serial.println(state);
-      delay(1000);
-      push[WHITE] = 0;
+    if (push[WHITE]){  
+      if (isPushbuttonClicked(WHITE) == 1){
+        numVib = 0; 
+        numBtnF = 0;
+        numBtnT = 0;
+        lcd.setCursor(btnCursol[numBtnT], 1);
+        lcd.blink();
+        state = SENSING;
+        myDFPlayer.play(START_SOUND);
+        //Serial.println(state);
+        //delay(1000);
+        push[WHITE] = 0;
+      }  
     }
 
     break;
@@ -183,48 +186,45 @@ void loop() {
         state = FINISH;
         //Serial.println(state);
       }
-
       break;
     }
     
-    // check_button(BLUE);
-    // check_button(YELLOW);
-    // check_button(RED);   
-    // if (buttonON[BLUE] || buttonON[YELLOW] || buttonON[RED]){ // pushed color buttons
     if (push[BLUE] || push[YELLOW] || push[RED]){
-      state = BUTTON;
-      Serial.println(state);
-      break;      
-     }
-
-    // check_button(GREEN);
-    // if (buttonON[GREEN]){ // pushed the goal button
-    if (push[GREEN]){
-      if (numBtnT == 3 ){
-        game_clear();        
-      }else{
-        game_over();   
-      }
-      state = FINISH;
-      //Serial.println(state);
-      //delay(1000);
-      push[GREEN] = 0;      
-      break;  
+      if (isPushbuttonClicked(BLUE) == 2 || isPushbuttonClicked(YELLOW) == 2 || isPushbuttonClicked(RED) == 2){ // released the button
+        state = BUTTON;
+        Serial.println(state);
+        break; 
+      }          
     }
 
-    // check_button(WHITE);
-    // if (buttonON[WHITE]){ // pushed the start button -restart
+    if (push[GREEN]){
+      if (isPushbuttonClicked(GREEN) == 1){
+        if (numBtnT == 3 ){
+          game_clear();        
+        }else{
+          game_over();   
+        }
+        state = FINISH;
+        //Serial.println(state);
+        //delay(1000);
+        push[GREEN] = 0;
+        break;  
+      }      
+    }
+
     if (push[WHITE]){
-      numVib = 0; 
-      numBtnF = 0;
-      numBtnT = 0;
-      lcd.setCursor(6, 0);
-      lcd.print("  T0 F0 A0");
-      lcd.setCursor(btnCursol[numBtnT], 1);
-      myDFPlayer.play(START_SOUND);
-      delay(1000);
-      push[WHITE] = 0;
-      break;
+      if (isPushbuttonClicked(WHITE) == 1){
+        numVib = 0; 
+        numBtnF = 0;
+        numBtnT = 0;
+        lcd.setCursor(6, 0);
+        lcd.print("  T0 F0 A0");
+        lcd.setCursor(btnCursol[numBtnT], 1);
+        myDFPlayer.play(START_SOUND);
+        //delay(1000);
+        push[WHITE] = 0;
+        break;
+      }
     }    
     break;
   case VIBRATION:
@@ -245,14 +245,15 @@ void loop() {
     delay(500);
     break;
   case BUTTON:
-    //if (buttonON[order[currMode][numBtnT]] == true ){
-    if (push[order[currMode][numBtnT]] == true ){
+    if (numBtnT < 3 && push[order[currMode][numBtnT]] == true ){
       numBtnT += 1;
       lcd.setCursor(9, 0);
       lcd.print(String(numBtnT));
       lcd.setCursor(btnCursol[numBtnT], 1);
       myDFPlayer.play(BUTTON_TRUE_SOUND);
-      delay(300);
+      while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+      while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
+      //delay(300);
       state = SENSING;
       //Serial.println(state);
     }else{
@@ -261,7 +262,9 @@ void loop() {
       lcd.print(String(numBtnF));
       lcd.setCursor(btnCursol[numBtnT], 1);
       myDFPlayer.play(BUTTON_FALSE_SOUND);
-      delay(300);
+      while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+      while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
+      //delay(300);
       if (numBtnF < 3){
         state = SENSING;
         //Serial.println(state);
@@ -271,7 +274,7 @@ void loop() {
         //Serial.println(state);
       }
     }
-    delay(1000);
+    //delay(1000);
     push[BLUE] = 0;
     push[YELLOW] = 0;
     push[RED] = 0;
@@ -288,14 +291,14 @@ void loop() {
       break;
     }
     
-    // check_button(WHITE);
-    // if (buttonON[WHITE]==true){
     if (push[WHITE]){
-      state = WAITING;
-      prevMode = 10;
-      delay(1000);
-      push[WHITE] = 0;
-      break;
+      if (isPushbuttonClicked(WHITE) == 1){
+        state = WAITING;
+        prevMode = 10;
+        //delay(1000);
+        push[WHITE] = 0;
+        break;
+      }
     }
     break;
   default:
@@ -329,23 +332,6 @@ void sens_vib(){
   sens = true;
 }
 
-// update buttonState 
-// void check_button(int i){
-//   buttonON[i] = false;
-//   if(buttonState[i] == true && millis()-prevTime_B[i] > 1000 && digitalRead(PIN_BTN[i])){
-//     buttonState[i] = false;
-//     push[i] = false;    
-//   }
-//   if (push[i]){          
-      
-//       if(buttonState[i] == false){
-//         buttonState[i] = true;
-//         prevTime_B[i] = millis();
-//         buttonON[i] = true;        
-//       }
-//       push[i] = false;
-//     }
-// }
 
 // game over 
 void game_over(){
@@ -357,9 +343,11 @@ void game_over(){
   lcd.noBlink();
   //delay(1000);
   myDFPlayer.play(GAMEOVER1_SOUND);
-  while(digitalRead(PIN_DFP)==LOW);
+  while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+  while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
   myDFPlayer.play(GAMEOVER2_SOUND);
-  while(digitalRead(PIN_DFP)==LOW);
+  while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+  while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
 }
 
 // game clear
@@ -369,8 +357,38 @@ void game_clear(){
   lcd.print("CONGRATULATION!");
   lcd.noBlink();
   myDFPlayer.play(GAMECLEAR1_SOUND);
-  //while(digitalRead(PIN_DFP)==LOW);
-  delay(2000);
+  while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+  while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
+  //delay(2000);
   myDFPlayer.play(GAMECLEAR2_SOUND);
-  while(digitalRead(PIN_DFP)==LOW);
+  while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+  while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
+}
+
+/* check the push button state */
+// 0: no pushed
+// 1: pushed
+// 2: released 
+int isPushbuttonClicked(int i) {
+
+    int state = digitalRead(PIN_BTN[i]);
+    if (state != lastButtonState[i]) { // reset timer
+        lastDebounceTime[i] = millis();
+    }
+  
+    if ((millis() - lastDebounceTime[i]) > debounceWindow) {
+        if (state != buttonState[i]) {
+            buttonState[i] = state;
+            if (buttonState[i] == LOW) { // pushed
+                lastButtonState[i] = state;
+                return 1;
+            }
+            if (buttonState[i] == HIGH) { // released
+                lastButtonState[i] = state;
+                return 2;
+            }
+        }
+    }
+    lastButtonState[i] = state;
+    return 0;
 }
