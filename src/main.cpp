@@ -93,7 +93,6 @@ void setup() {
   // LCD setting
   lcd.init();
   lcd.backlight();
-
   //lcd.setCursor(0, 0);
   //lcd.print("LCD connect.    ");
 
@@ -160,6 +159,8 @@ void loop() {
         lcd.blink();
         state = SENSING;
         myDFPlayer.play(START_SOUND);
+        while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+        while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
         //Serial.println(state);
         //delay(1000);
         push[WHITE] = 0;
@@ -171,17 +172,18 @@ void loop() {
     
     if (sens){ // sense vibration sensor
       numVib += 1;
-      myDFPlayer.loop(VIBRATIONS_SOUND);
-      
+      myDFPlayer.loop(VIBRATIONS_SOUND);  
       if (numVib <4){ //
         lcd.setCursor(15, 0);
         lcd.print(String(numVib));
         lcd.setCursor(btnCursol[numBtnT], 1);
         state = VIBRATION;
         //Serial.println(state);      
-      }else{ // game over
+      }else{ // game over        
+        while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+        while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
+        myDFPlayer.stop(); 
         sens = false;
-        myDFPlayer.stop();
         game_over();
         state = FINISH;
         //Serial.println(state);
@@ -228,21 +230,22 @@ void loop() {
     }    
     break;
   case VIBRATION:
-    if(sens){
-      novib = 0;      
-      
-    }else{
-      novib += 1;
-      if(novib > 2){
-        myDFPlayer.stop();
-        state = SENSING;
-        //Serial.println(state);
-        novib = 0;
-        sens = false;
-      }      
-    }
     sens = false;
     delay(500);
+    if(sens){
+      novib = 0;     
+    }else{ 
+      novib += 1;
+      if(novib > 2){ // exit the VIBRATION state on condition of no vibration for 500ms x4 
+        while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
+        while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
+        myDFPlayer.stop();
+        novib = 0;
+        sens = false;
+        state = SENSING;
+        //Serial.println(state);        
+      }
+    }    
     break;
   case BUTTON:
     if (numBtnT < 3 && push[order[currMode][numBtnT]] == true ){
@@ -341,7 +344,7 @@ void game_over(){
   lcd.setCursor(0, 1);
   lcd.print("TRY AGAIN!");
   lcd.noBlink();
-  //delay(1000);
+  delay(500);
   myDFPlayer.play(GAMEOVER1_SOUND);
   while(digitalRead(PIN_DFP)==HIGH); // wait for starting the sound 
   while(digitalRead(PIN_DFP)==LOW); // wait for finishing the sound
